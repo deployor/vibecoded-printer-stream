@@ -8,6 +8,15 @@ if [[ -z "$(bashio::config 'stream_key')" ]]; then
 fi
 
 # Provide info logs
-bashio::log.info "Printer URL: $(bashio::config 'printer_url')"
+PRINTER_URL="$(bashio::config 'printer_url')"
+STATUS_URL="$(echo "${PRINTER_URL}" | sed -E 's#^(https?://[^/]+).*#\1#')"
+bashio::log.info "Printer URL: ${PRINTER_URL} (status check: ${STATUS_URL})"
 bashio::log.info "Check interval: $(bashio::config 'check_interval') seconds"
 bashio::log.info "RTMP endpoint: rtmp://rtmp.deployor.dev:1935/live/<stream_key>"
+
+# Networking note
+if bashio::config.true 'host_network'; then
+  bashio::log.info "host_network enabled: add-on has direct access to your LAN"
+else
+  bashio::log.warning "host_network is disabled; reaching local IPs like 192.168.x.x may fail"
+fi
