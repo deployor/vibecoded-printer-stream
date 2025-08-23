@@ -19,7 +19,7 @@ is_ffmpeg_running() {
 
 start_stream() {
   log "Starting FFmpeg: ${PRINTER_URL} -> ${RTMP_PUBLISH_URL}"
-  ffmpeg -f mjpeg -i "${PRINTER_URL}" -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 -c:v libx264 -c:a aac -vf format=yuv420p -r 15 -b:v 800k -bufsize 1600k -maxrate 1000k -g 30 -preset fast -tune zerolatency -shortest -flags +global_header -f flv "${RTMP_PUBLISH_URL}" &
+  ffmpeg -f mjpeg -i "${PRINTER_URL}" -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 -c:v libx264 -c:a aac -vf format=yuv420p -b:v 600k -bufsize 1200k -maxrate 800k -g 45 -preset ultrafast -tune zerolatency -shortest -flags +global_header -f flv "${RTMP_PUBLISH_URL}" &
   FFMPEG_PID=$!
   log "FFmpeg started with PID ${FFMPEG_PID}"
 }
