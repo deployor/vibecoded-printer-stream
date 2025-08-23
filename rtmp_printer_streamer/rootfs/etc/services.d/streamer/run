@@ -6,11 +6,10 @@ log() { echo "$(date -Iseconds) [streamer] $*"; }
 STREAM_KEY=$(bashio::config 'stream_key')
 PRINTER_URL=$(bashio::config 'printer_url')
 CHECK_INTERVAL=$(bashio::config 'check_interval')
-
 STATUS_URL="$(echo "${PRINTER_URL}" | sed -E 's#^(https?://[^/]+).*#\1#')"
 
 RTMP_BASE="rtmp://rtmp.deployor.dev:1935/live"
-RTMP_URL="${RTMP_BASE}/${STREAM_KEY}"
+RTMP_PUBLISH_URL="${RTMP_BASE}/${STREAM_KEY}"
 
 FFMPEG_PID=""
 
@@ -19,7 +18,7 @@ is_ffmpeg_running() {
 }
 
 start_stream() {
-  log "Starting ffmpeg: ${PRINTER_URL} -> ${RTMP_URL}"
+  log "Starting ffmpeg: ${PRINTER_URL} -> ${RTMP_PUBLISH_URL}"
   # Notes:
   #  -hide_banner/-loglevel reduce noise but keep warnings
   #  Reconnect flags help with transient network hiccups
@@ -27,10 +26,13 @@ start_stream() {
   ffmpeg -hide_banner -loglevel warning \
     -fflags nobuffer -flags low_delay \
     -reconnect 1 -reconnect_streamed 1 -reconnect_at_eof 1 -reconnect_delay_max 2 \
+    -f mpjpeg -use_wallclock_as_timestamps 1 \
     -i "${PRINTER_URL}" \
-    -an -c:v libx264 -preset veryfast -tune zerolatency -r 15 -g 30 -vf "scale=1920:1080:force_original_aspect_ratio=decrease" \
+    -an -c:v libx264 -preset veryfast -tune zerolatency \
+    -vf "fps=15,scale=1920:1080:force_original_aspect_ratio=decrease" -g 30 \
     -pix_fmt yuv420p -b:v 2500k -maxrate 2500k -bufsize 5000k \
-    -f flv "${RTMP_URL}" &
+    -f flv -flvflags no_duration_filesize -rtmp_live live \
+    "${RTMP_PUBLISH_URL}" &
   FFMPEG_PID=$!
   log "ffmpeg started with PID ${FFMPEG_PID}"
 }
