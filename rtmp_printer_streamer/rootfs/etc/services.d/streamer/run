@@ -11,26 +11,26 @@ STATUS_URL="$(echo "${PRINTER_URL}" | sed -E 's#^(https?://[^/]+).*#\1#')"
 RTMP_BASE="rtmp://rtmp.deployor.dev:1935/live/"
 RTMP_PUBLISH_URL="${RTMP_BASE}${STREAM_KEY}"
 
-FFMPEG_PID=""
+STREAMER_PID=""
 
-is_ffmpeg_running() {
-  [[ -n "${FFMPEG_PID:-}" ]] && kill -0 "${FFMPEG_PID}" 2>/dev/null
+is_streamer_running() {
+  [[ -n "${STREAMER_PID:-}" ]] && kill -0 "${STREAMER_PID}" 2>/dev/null
 }
 
 start_stream() {
-  log "Starting FFmpeg: ${PRINTER_URL} -> ${RTMP_PUBLISH_URL}"
-  ffmpeg -f mjpeg -i "${PRINTER_URL}" -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 -c:v libx264 -c:a aac -vf format=yuv420p -b:v 600k -bufsize 1200k -maxrate 800k -g 45 -preset ultrafast -tune zerolatency -shortest -flags +global_header -f flv "${RTMP_PUBLISH_URL}" &
-  FFMPEG_PID=$!
-  log "FFmpeg started with PID ${FFMPEG_PID}"
+  log "Starting Python streamer: ${PRINTER_URL} -> ${RTMP_PUBLISH_URL}"
+  python3 /usr/local/bin/stream.py "${PRINTER_URL}" "${RTMP_PUBLISH_URL}" &
+  STREAMER_PID=$!
+  log "Python streamer started with PID ${STREAMER_PID}"
 }
 
 stop_stream() {
-  if is_ffmpeg_running; then
-    log "Stopping ffmpeg PID ${FFMPEG_PID}"
-    kill "${FFMPEG_PID}" 2>/dev/null || true
-    wait "${FFMPEG_PID}" 2>/dev/null || true
+  if is_streamer_running; then
+    log "Stopping streamer PID ${STREAMER_PID}"
+    kill "${STREAMER_PID}" 2>/dev/null || true
+    wait "${STREAMER_PID}" 2>/dev/null || true
   fi
-  FFMPEG_PID=""
+  STREAMER_PID=""
 }
 
 check_online() {
@@ -50,11 +50,11 @@ log "Starting monitor loop (interval: ${CHECK_INTERVAL}s)"
 
 while true; do
   if check_online; then
-    if ! is_ffmpeg_running; then
-      start_stream || { log "Error: failed to start ffmpeg"; FFMPEG_PID=""; }
+    if ! is_streamer_running; then
+      start_stream || { log "Error: failed to start streamer"; STREAMER_PID=""; }
     fi
   else
-    if is_ffmpeg_running; then
+    if is_streamer_running; then
       log "Printer offline, stopping stream"
       stop_stream
     else
@@ -62,11 +62,20 @@ while true; do
     fi
   fi
 
-  # ffmpeg died unexpectedly -> reset state; will restart next tick if online
-  if [[ -n "${FFMPEG_PID:-}" ]] && ! is_ffmpeg_running; then
-    log "ffmpeg exited unexpectedly"
-    FFMPEG_PID=""
+  # streamer died unexpectedly -> reset state; will restart next tick if online
+  if [[ -n "${STREAMER_PID:-}" ]] && ! is_streamer_running; then
+    log "streamer exited unexpectedly"
+    STREAMER_PID=""
   fi
+
+  # Monitor the stream
+  while true; do
+    if ! kill -0 $STREAMER_PID 2>/dev/null; then
+      log "Stream process died, restarting..."
+      break
+    fi
+    sleep 5
+  done
 
   sleep "${CHECK_INTERVAL:-10}"
 
