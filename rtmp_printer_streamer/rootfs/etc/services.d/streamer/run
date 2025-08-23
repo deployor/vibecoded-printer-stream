@@ -19,7 +19,7 @@ is_ffmpeg_running() {
 
 start_stream() {
   log "Starting GStreamer: ${PRINTER_URL} -> ${RTMP_PUBLISH_URL}"
-  gst-launch-1.0 -e souphttpsrc location="${PRINTER_URL}" is-live=true ! multipartdemux ! jpegdec ! videoconvert ! videoscale ! video/x-raw,width=1920,height=1080,framerate=15/1,pixel-aspect-ratio=1/1 ! x264enc bitrate=2500 speed-preset=ultrafast tune=zerolatency key-int-max=30 ! video/x-h264,profile=baseline,stream-format=byte-stream ! h264parse ! flvmux streamable=true ! rtmpsink location="${RTMP_PUBLISH_URL}" &
+  gst-launch-1.0 -e souphttpsrc location="${PRINTER_URL}" is-live=true ! multipart/x-mixed-replace,boundary=--myboundary ! multipartdemux ! image/jpeg ! jpegdec ! videoconvert ! videoscale ! video/x-raw,width=1920,height=1080,framerate=15/1,pixel-aspect-ratio=1/1 ! x264enc bitrate=2500 speed-preset=ultrafast tune=zerolatency key-int-max=30 ! video/x-h264,profile=baseline,stream-format=byte-stream ! h264parse ! flvmux streamable=true ! rtmpsink location="${RTMP_PUBLISH_URL}" &
   FFMPEG_PID=$!  # Keeping variable name for compatibility
   log "GStreamer started with PID ${FFMPEG_PID}"
 }
