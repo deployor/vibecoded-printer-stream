@@ -27,16 +27,25 @@ class MJPEGStreamer:
         self.frame_queue = queue.Queue(maxsize=5)
         self.running = False
         self.ffmpeg_process = None
+        self.frame_width = None
+        self.frame_height = None
         
     def start_ffmpeg_process(self):
         """Start FFmpeg process to handle RTMP output with optimized settings for Pi 5"""
+        if not self.frame_width or not self.frame_height:
+            logger.error("Frame dimensions not set. Cannot start FFmpeg process.")
+            return False
+            
+        resolution = f"{self.frame_width}x{self.frame_height}"
+        logger.info(f"Starting FFmpeg with resolution: {resolution}")
+        
         cmd = [
             'ffmpeg',
             '-y',  # Overwrite output
             '-f', 'rawvideo',
             '-vcodec', 'rawvideo',
             '-pix_fmt', 'bgr24',
-            '-s', '1920x1080',  # Adjust based on your camera resolution
+            '-s', resolution,  # Use detected frame dimensions
             '-r', '15',  # Match camera framerate
             '-i', '-',  # Read from stdin
             '-f', 'lavfi',
@@ -97,6 +106,11 @@ class MJPEGStreamer:
                         frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
                         
                         if frame is not None:
+                            # Set frame dimensions from first frame
+                            if self.frame_width is None or self.frame_height is None:
+                                self.frame_height, self.frame_width = frame.shape[:2]
+                                logger.info(f"Detected frame dimensions: {self.frame_width}x{self.frame_height}")
+                            
                             # Add frame to queue (non-blocking)
                             try:
                                 self.frame_queue.put(frame, block=False)
@@ -160,15 +174,30 @@ class MJPEGStreamer:
         """Start the streaming process"""
         logger.info(f"Starting MJPEG to RTMP stream: {self.mjpeg_url} -> {self.rtmp_url}")
         
-        # Start FFmpeg process
-        if not self.start_ffmpeg_process():
-            return False
-        
         self.running = True
         
-        # Start reader thread
+        # Start reader thread first to detect frame dimensions
         reader_thread = threading.Thread(target=self.mjpeg_reader, daemon=True)
         reader_thread.start()
+        
+        # Wait for frame dimensions to be detected
+        logger.info("Waiting for frame dimensions to be detected...")
+        timeout = 30  # 30 second timeout
+        start_time = time.time()
+        while (self.frame_width is None or self.frame_height is None) and self.running:
+            time.sleep(0.1)
+            if time.time() - start_time > timeout:
+                logger.error("Timeout waiting for frame dimensions")
+                self.stop()
+                return False
+        
+        if not self.running:
+            return False
+            
+        # Start FFmpeg process after dimensions are known
+        if not self.start_ffmpeg_process():
+            self.stop()
+            return False
         
         # Start processor thread
         processor_thread = threading.Thread(target=self.stream_processor, daemon=True)
