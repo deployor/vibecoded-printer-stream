@@ -1,0 +1,13 @@
+#!/usr/bin/with-contenv bashio
+set -euo pipefail
+
+# Validate required configuration
+if [[ -z "$(bashio::config 'stream_key')" ]]; then
+  bashio::log.fatal "Configuration 'stream_key' is required and cannot be empty."
+  exit 1
+fi
+
+# Provide info logs
+bashio::log.info "Printer URL: $(bashio::config 'printer_url')"
+bashio::log.info "Check interval: $(bashio::config 'check_interval') seconds"
+bashio::log.info "RTMP endpoint: rtmp://rtmp.deployor.dev:1935/live/<stream_key>"

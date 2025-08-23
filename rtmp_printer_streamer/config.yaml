@@ -1,0 +1,26 @@
+name: RTMP Printer Streamer
+version: "1.0.0"
+slug: rtmp_printer_streamer
+description: "Streams a printer MJPEG feed to an RTMP endpoint and auto-starts/stops based on printer availability"
+url: https://deployor.dev
+arch:
+  - aarch64
+  - amd64
+  - armv7
+  - armhf
+  - i386
+startup: services
+init: false
+boot: auto
+ingress: false
+homeassistant_api: false
+journald: false
+host_network: true
+options:
+  stream_key: ""
+  printer_url: "http://192.168.0.113:8080/?action=stream"
+  check_interval: 10
+schema:
+  stream_key: str
+  printer_url: str
+  check_interval: int
