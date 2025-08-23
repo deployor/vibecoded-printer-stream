@@ -9,7 +9,7 @@ CHECK_INTERVAL=$(bashio::config 'check_interval')
 STATUS_URL="$(echo "${PRINTER_URL}" | sed -E 's#^(https?://[^/]+).*#\1#')"
 
 RTMP_BASE="rtmp://rtmp.deployor.dev:1935/live"
-RTMP_PUBLISH_URL="${RTMP_BASE}/${STREAM_KEY}"
+RTMP_PUBLISH_URL="${RTMP_BASE}"
 
 FFMPEG_PID=""
 
@@ -18,7 +18,7 @@ is_ffmpeg_running() {
 }
 
 start_stream() {
-  log "Starting ffmpeg: ${PRINTER_URL} -> ${RTMP_PUBLISH_URL}"
+  log "Starting ffmpeg: ${PRINTER_URL} -> ${RTMP_PUBLISH_URL} (playpath=<stream_key>)"
   # Notes:
   #  -hide_banner/-loglevel reduce noise but keep warnings
   #  Reconnect flags help with transient network hiccups
@@ -32,6 +32,7 @@ start_stream() {
     -vf "fps=15,scale=1920:1080:force_original_aspect_ratio=decrease" -g 30 \
     -pix_fmt yuv420p -b:v 2500k -maxrate 2500k -bufsize 5000k \
     -f flv -flvflags no_duration_filesize -rtmp_live live \
+    -rtmp_app "live" -rtmp_tcurl "${RTMP_PUBLISH_URL}" -rtmp_playpath "${STREAM_KEY}" \
     "${RTMP_PUBLISH_URL}" &
   FFMPEG_PID=$!
   log "ffmpeg started with PID ${FFMPEG_PID}"
