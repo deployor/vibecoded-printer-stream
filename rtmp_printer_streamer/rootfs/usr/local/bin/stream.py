@@ -29,6 +29,8 @@ class MJPEGStreamer:
         self.ffmpeg_process = None
         self.frame_width = None
         self.frame_height = None
+        self.last_frame_time = time.time()
+        self.watchdog_timeout = 10  # 10 seconds without frames triggers restart
         
     def start_ffmpeg_process(self):
         """Start FFmpeg process to handle RTMP output with optimized settings for Pi 5"""
@@ -114,16 +116,21 @@ class MJPEGStreamer:
                             # Add frame to queue (non-blocking)
                             try:
                                 self.frame_queue.put(frame, block=False)
+                                self.last_frame_time = time.time()  # Update watchdog timer
                             except queue.Full:
                                 # Drop oldest frame if queue is full
                                 try:
                                     self.frame_queue.get_nowait()
                                     self.frame_queue.put(frame, block=False)
+                                    self.last_frame_time = time.time()  # Update watchdog timer
                                 except queue.Empty:
                                     pass
                 
                 stream.close()
                 
+            except URLError as e:
+                logger.error(f"MJPEG connection error: {e}")
+                time.sleep(2)  # Wait longer before retrying connection issues
             except Exception as e:
                 logger.error(f"MJPEG reader error: {e}")
                 time.sleep(1)  # Wait before retrying
@@ -148,6 +155,7 @@ class MJPEGStreamer:
                         self.ffmpeg_process.stdin.flush()
                         
                         frame_count += 1
+                        self.last_frame_time = time.time()  # Update watchdog timer
                         
                         # Log FPS every 5 seconds
                         current_time = time.time()
@@ -175,6 +183,7 @@ class MJPEGStreamer:
         logger.info(f"Starting MJPEG to RTMP stream: {self.mjpeg_url} -> {self.rtmp_url}")
         
         self.running = True
+        self.last_frame_time = time.time()  # Reset watchdog timer on start
         
         # Start reader thread first to detect frame dimensions
         reader_thread = threading.Thread(target=self.mjpeg_reader, daemon=True)
@@ -211,6 +220,13 @@ class MJPEGStreamer:
                 # Check if FFmpeg process is still running
                 if self.ffmpeg_process and self.ffmpeg_process.poll() is not None:
                     logger.error("FFmpeg process died, restarting...")
+                    self.stop()
+                    return False
+                
+                # Watchdog: Check if we haven't received frames for too long
+                current_time = time.time()
+                if current_time - self.last_frame_time > self.watchdog_timeout:
+                    logger.error(f"No frames received for {self.watchdog_timeout} seconds, restarting stream...")
                     self.stop()
                     return False
                     
